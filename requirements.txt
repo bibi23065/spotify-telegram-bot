@@ -1,0 +1,3 @@
+python-telegram-bot[job-queue]>=20.0
+spotdl>=4.0
+aiohttp>=3.9
