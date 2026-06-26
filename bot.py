@@ -20,6 +20,9 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 PORT = int(os.environ.get("PORT", 8080))
 MAX_CONCURRENT = int(os.environ.get("MAX_CONCURRENT_DOWNLOADS", "3"))
 
+SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "")
+SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+
 SPOTIFY_URL_RE = re.compile(
     r"https?://open\.spotify\.com/(track|album|playlist|artist)/[a-zA-Z0-9]+"
 )
@@ -73,11 +76,17 @@ async def download_spotify(url: str, chat_id: int, context: ContextTypes.DEFAULT
             msg = await context.bot.send_message(chat_id, "📥 Downloading...")
             logger.info("Starting download: %s", url)
 
-            proc = await asyncio.create_subprocess_exec(
+            cmd = [
                 "spotdl", "download", url,
                 "--output", "{title} - {artist}.{output-ext}",
                 "--format", "mp3",
                 "--bitrate", "320k",
+            ]
+            if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+                cmd.extend(["--client-id", SPOTIFY_CLIENT_ID, "--client-secret", SPOTIFY_CLIENT_SECRET])
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=temp_dir,
@@ -105,9 +114,13 @@ async def download_spotify(url: str, chat_id: int, context: ContextTypes.DEFAULT
                 mp3_files = [f for f in all_files if f.suffix.lower() in audio_exts]
 
             if not mp3_files:
+                stdout_text = stdout.decode().strip()
                 stderr_text = stderr.decode().strip()
+                debug = f"STDOUT:\n{stdout_text[:300]}\n\nSTDERR:\n{stderr_text[:300]}"
+                all_items = [f.name for f in Path(temp_dir).iterdir()]
+                debug += f"\n\nDIR CONTENTS: {all_items}"
                 await context.bot.edit_message_text(
-                    f"❌ No audio files found.\n\nDebug info:\n```\n{stderr_text[:300]}\n```",
+                    f"❌ No audio files found.\n\nDebug:\n```\n{debug[:500]}\n```",
                     chat_id,
                     msg.message_id,
                 )
