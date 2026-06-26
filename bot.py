@@ -73,18 +73,19 @@ async def download_spotify(url: str, chat_id: int, context: ContextTypes.DEFAULT
             msg = await context.bot.send_message(chat_id, "📥 Downloading...")
             logger.info("Starting download: %s", url)
 
-            output_template = str(Path(temp_dir) / "{title} - {artist}.{output-ext}")
             proc = await asyncio.create_subprocess_exec(
                 "spotdl", "download", url,
-                "--output", output_template,
+                "--output", "{title} - {artist}.{output-ext}",
                 "--format", "mp3",
                 "--bitrate", "320k",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=temp_dir,
             )
             stdout, stderr = await proc.communicate()
 
             logger.info("spotdl stdout: %s", stdout.decode().strip())
+            logger.info("Files in temp_dir after download: %s", [f.name for f in Path(temp_dir).iterdir()])
             if proc.returncode != 0:
                 error_msg = stderr.decode().strip() or "Unknown error"
                 logger.error("spotdl failed (rc=%d): %s", proc.returncode, error_msg)
