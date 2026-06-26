@@ -73,18 +73,21 @@ async def download_spotify(url: str, chat_id: int, context: ContextTypes.DEFAULT
             msg = await context.bot.send_message(chat_id, "📥 Downloading...")
             logger.info("Starting download: %s", url)
 
+            output_template = str(Path(temp_dir) / "{title} - {artist}.{output-ext}")
             proc = await asyncio.create_subprocess_exec(
                 "spotdl", "download", url,
-                "--output", temp_dir,
+                "--output", output_template,
+                "--format", "mp3",
                 "--bitrate", "320k",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await proc.communicate()
 
+            logger.info("spotdl stdout: %s", stdout.decode().strip())
             if proc.returncode != 0:
                 error_msg = stderr.decode().strip() or "Unknown error"
-                logger.error("spotdl failed: %s", error_msg)
+                logger.error("spotdl failed (rc=%d): %s", proc.returncode, error_msg)
                 await context.bot.edit_message_text(
                     f"❌ Download failed:\n{error_msg[:500]}",
                     chat_id,
@@ -95,8 +98,15 @@ async def download_spotify(url: str, chat_id: int, context: ContextTypes.DEFAULT
             mp3_files = list(Path(temp_dir).rglob("*.mp3"))
 
             if not mp3_files:
+                all_files = list(Path(temp_dir).rglob("*"))
+                logger.warning("No .mp3 files. All files in temp_dir: %s", [f.name for f in all_files if f.is_file()])
+                audio_exts = (".mp3", ".webm", ".m4a", ".opus", ".ogg", ".flac")
+                mp3_files = [f for f in all_files if f.suffix.lower() in audio_exts]
+
+            if not mp3_files:
+                stderr_text = stderr.decode().strip()
                 await context.bot.edit_message_text(
-                    "❌ No audio files found. The URL may be invalid or unavailable.",
+                    f"❌ No audio files found.\n\nDebug info:\n```\n{stderr_text[:300]}\n```",
                     chat_id,
                     msg.message_id,
                 )
